@@ -1,0 +1,12 @@
+# Data
+data/**
+data/raw/**
+data/processed/**
+
+# Reference documents
+Reference Documents/**
+
+# Environment
+.env
+__pycache__/
+.ipynb_checkpoints/
