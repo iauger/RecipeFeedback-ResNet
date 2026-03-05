@@ -12,7 +12,6 @@ import pandas as pd
 
 class RecipeDataset(Dataset):
     def __init__(self, df: pd.DataFrame):
-        self.df = df
         """
         Group features into metadata and tags
         """
@@ -32,9 +31,19 @@ class RecipeDataset(Dataset):
         self.meta_features = torch.tensor(df[self.meta_cols].values, dtype=torch.float32)
         self.tag_features = torch.tensor(df[self.tag_cols].values, dtype=torch.float32)
         
+    @property
+    def meta_dim(self) -> int:
+        """Returns the number of metadata/structural features."""
+        return len(self.meta_cols)
+
+    @property
+    def tag_dim(self) -> int:
+        """Returns the number of NLP/experiential features."""
+        return len(self.tag_cols)
+        
 
     def __len__(self) -> int:
-        return len(self.df)
+        return len(self.targets)
 
     def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # Return a tuple of (metadata features, tag features, target)

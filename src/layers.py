@@ -8,6 +8,9 @@ Layers module for defining reusable building blocks of the neural network archit
 # Reusable fully connected block with normalization, activation, and dropout
 class FullyConnectedBlock(nn.Module):
     def __init__(self, in_size: int, out_size: int, dropout: float = 0.2):
+        """
+        Standard fully connected block with linear transformation, batch normalization, ReLU activation, and dropout.
+        """
         super().__init__()
         self.linear = nn.Linear(in_size, out_size)
         self.batchnorm = nn.BatchNorm1d(out_size)
@@ -31,6 +34,10 @@ class FullyConnectedBlock(nn.Module):
 # Reusable residual block with skip connections
 class ResidualBlock(nn.Module):
     def __init__(self, size: int, dropout: float = 0.2):
+        """
+        Residual block that applies two fully connected layers with a skip connection. 
+        The input is added to the output of the two layers before applying a final ReLU activation.
+        """
         super().__init__()
         # Two linear layers with normalization in between
         self.path = nn.Sequential(
