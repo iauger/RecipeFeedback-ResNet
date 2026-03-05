@@ -7,33 +7,46 @@ class RecipeNet(nn.Module):
     def __init__(self, meta_in: int, tag_in: int, hidden_dim: int = 128):
         """
         Dual-Encoder architecture with a Residual Backbone.
-        
-        Args:
-            meta_in: Number of metadata features (209).
-            tag_in: Number of tag features (34).
-            hidden_dim: The size of the shared latent space.
+        - Metadata Encoder: Processes continuous and one-hot encoded features related to the recipe's metadata (e.g., cooking time, calories, recipe tags, ingredients).
+        - Tag Encoder: Processes semantic feedback tags from reviews (e.g., "too_salty", "easy_quick", "family_hit").
         """
-        super().__init__()
+        super().__init__()        
+        # Initialization of the architecture components
+        fc = FullyConnectedBlock
+        res = ResidualBlock
         
-        # STUB 1: Metadata Encoder (The Bottleneck)
-        # Goal: Transition from sparse 209-dim to a dense hidden_dim.
-        # Hint: Use a two-step reduction (e.g., meta_in -> hidden_dim*2 -> hidden_dim).
-        self.meta_encoder = None 
+        # Metadata Encoder
+        # Moves features from 209 to 128
+        self.meta_encoder = nn.Sequential(
+            fc(meta_in, hidden_dim * 2),
+            fc(hidden_dim * 2, hidden_dim)
+        )
         
-        # STUB 2: Tag Encoder (The Refiner)
-        # Goal: Project 34-dim NLP signals into a dense hidden_dim.
-        # Hint: Since this is already dense, a single block may suffice.
-        self.tag_encoder = None
+        # Tag Encoder
+        # Expands from 34 to 128 to match the metadata encoder's output dimension
+        self.tag_encoder = fc(tag_in, hidden_dim)   
         
-        # STUB 3: Feature Fusion & Backbone
-        # Goal: Concatenate the two encoders and reason through them.
-        # Hint: input size here will be hidden_dim * 2.
-        self.backbone = None
+        # Encoder Fusion & Backbone
+        # After encoding, we concatenate the outputs (128 + 128 = 256) and pass through a backbone of fully connected and residual blocks
+        fusion_dim = hidden_dim * 2
+        self.backbone = nn.Sequential(
+            fc(fusion_dim, fusion_dim),
+            res(fusion_dim),
+            res(fusion_dim),
+            fc(fusion_dim, hidden_dim)
+        )
         
-        # STUB 4: The Output Head
-        # Goal: Final regression to the Bayesian Rating.
-        self.regressor = None
+        # Output Head
+        # Final regression layer to predict the Bayesian rating
+        self.regressor = nn.Linear(hidden_dim, 1)
+        nn.init.xavier_uniform_(self.regressor.weight)
+        if self.regressor.bias is not None:
+            nn.init.zeros_(self.regressor.bias)
+        
 
     def forward(self, meta_x, tag_x):
-        # STUB 5: The Forward Pass logic
-        pass
+        meta_out = self.meta_encoder(meta_x)
+        tag_out = self.tag_encoder(tag_x)
+        fused = torch.cat([meta_out, tag_out], dim=1)
+        backbone_out = self.backbone(fused)
+        return self.regressor(backbone_out)
