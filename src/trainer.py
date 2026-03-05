@@ -1,5 +1,6 @@
 # src/trainer.py
 
+import datetime
 import os
 import time
 import torch
@@ -7,7 +8,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from src.config import Settings, load_settings
-from src.models import HeadType
+from src.models import AblationType, HeadType
 
 
 
@@ -31,6 +32,7 @@ class Trainer:
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.config.learning_rate, weight_decay=self.config.weight_decay)
         self.history = {
             'model_type': None,
+            'ablation_type': None,
             'train_loss': [], 
             'val_loss': [],
             'grad_norm': []
@@ -97,11 +99,20 @@ class Trainer:
         self.history['val_loss'].append(avg_loss)
         return avg_loss
 
-    def fit(self, epochs: int, head_type: HeadType) -> dict[str, list[float]]:
+    def fit(self, epochs: int, head_type: HeadType, ablation: AblationType) -> dict[str, list[float]]:
         s = load_settings()
+        
+        self.current_ablation = ablation
+        self.history['ablation_type'] = ablation.value 
         self.history['model_type'] = head_type.value
+        
         model_name = os.path.join(s.models_dir, f"best_model_{head_type.value}.pth")
         best_val_loss = float('inf')
+        
+        # Early stopping config
+        patience = 15
+        trigger_times = 0
+        
         epoch_pbar  = tqdm(range(1, epochs + 1), desc="Training Progress", unit="epoch")
         
         for epoch in epoch_pbar:
@@ -117,29 +128,33 @@ class Trainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 torch.save(self.model.state_dict(), model_name)
-                status = "(Improved! Saved)"
+                trigger_times = 0 # reset early stopping counter
+                status = "(Model Improved and Saved)"
             else:
-                status = ""
+                trigger_times += 1
+                status = f"(Patience: {trigger_times}/{patience})"
+                
+            if trigger_times >= patience:
+                print(f"\nEarly stopping triggered after {epoch} epochs. No improvement in validation loss for {patience} consecutive epochs.")
+                break
             
+            self.scheduler.step(val_loss)
             epoch_pbar.set_postfix({
                 'T-Loss': f"{train_loss:.4f}",
                 'V-Loss': f"{val_loss:.4f}",
                 'Sec/Epoch': f"{epoch_time:.1f}"
             })
-
-            print(f"\nEpoch {epoch:02d}/{epochs} | Train: {train_loss:.4f} | Val: {val_loss:.4f}{status}")
-            
-            self.scheduler.step(val_loss)
         
         return self.history
     
-    def evaluate(self, loader, head_type: HeadType) -> dict:
+    def evaluate(self, loader, head_type: HeadType, ablation: AblationType, return_embeddings: bool = False):
         """
         Final evaluation on the unseen test set to report final model performance.
         """
         self.model.eval()
         total_loss = 0
         total_mae = 0
+        all_embeddings = []
         
         print(f"Evaluating {head_type.value} model on {len(loader.dataset)} test samples:")
         
@@ -147,8 +162,12 @@ class Trainer:
             for meta_x, tag_x, targets in loader:
                 meta_x, tag_x, targets = meta_x.to(self.device), tag_x.to(self.device), targets.to(self.device)
                 
-                outputs = self.model(meta_x, tag_x)
-                
+                if return_embeddings:
+                    outputs, embeddings = self.model(meta_x, tag_x, return_embeddings=True, ablation=ablation)
+                    all_embeddings.append(embeddings.cpu())
+                else:
+                    outputs = self.model(meta_x, tag_x, return_embeddings=False, ablation=ablation)
+                                
                 # Use standard MSE for reporting, even if we trained with Huber
                 loss = torch.nn.functional.mse_loss(outputs, targets)
                 mae = torch.nn.functional.l1_loss(outputs, targets)
@@ -173,4 +192,4 @@ class Trainer:
         print(f"MAE:  {avg_mae:.4f}")
         print("-" * 30)
         
-        return metrics
+        return metrics, (torch.cat(all_embeddings) if return_embeddings else None)

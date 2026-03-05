@@ -10,3 +10,6 @@ Reference Documents/**
 .env
 __pycache__/
 .ipynb_checkpoints/
+
+# Random
+todo.txt

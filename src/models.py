@@ -8,6 +8,11 @@ class HeadType(Enum):
     DEEP = "deep"
     RESIDUAL = "residual"
 
+class AblationType(Enum):
+    META_ONLY = "meta_only"
+    TAG_ONLY = "tag_only"
+    ALL_FEATURES = "all_features"
+
 class RecipeNet(nn.Module):
     def __init__(self, meta_in: int, tag_in: int, hidden_dim: int = 128, head_type: HeadType = HeadType.RESIDUAL):
         """
@@ -23,7 +28,6 @@ class RecipeNet(nn.Module):
         super().__init__()        
         # Initialization of the architecture components
         fc = FullyConnectedBlock
-        res = ResidualBlock
         
         # Metadata Encoder
         # Moves features from 209 to 128
@@ -86,9 +90,25 @@ class RecipeNet(nn.Module):
             FullyConnectedBlock(fusion_dim, hidden_dim)
         )
 
-    def forward(self, meta_x, tag_x):
+    def forward(self, meta_x, tag_x, return_embeddings=False, ablation: AblationType = AblationType.ALL_FEATURES):
+        # Apply Ablation at the input level
+        if ablation == AblationType.META_ONLY:
+            tag_x = torch.zeros_like(tag_x)
+        elif ablation == AblationType.TAG_ONLY:
+            meta_x = torch.zeros_like(meta_x)
+        
+        # Encode streams
         meta_out = self.meta_encoder(meta_x)
         tag_out = self.tag_encoder(tag_x)
-        fused = torch.cat([meta_out, tag_out], dim=1)
-        backbone_out = self.backbone(fused)
-        return self.regressor(backbone_out)
+        
+        # Fusion
+        fused = torch.cat((meta_out, tag_out), dim=1)
+        embeddings = self.backbone(fused)
+        
+        # Final prediction
+        prediction = self.regressor(embeddings)
+        
+        # Optionally return embeddings for analysis or to pass onto IR models
+        if return_embeddings:
+            return prediction, embeddings
+        return prediction
