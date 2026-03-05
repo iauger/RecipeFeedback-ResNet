@@ -56,6 +56,7 @@ class Settings:
     src_dir: str
     models_dir: str
     features_dir: str
+    results_dir: str
     # Data file paths
     # Raw data file paths
     raw_recipes_path: str
@@ -76,7 +77,7 @@ def validate_settings(s: Settings) -> None:
                 raise FileNotFoundError(f"Missing required file: {p}")
 
     # still ensure directories exist
-    for d in [s.raw_dir, s.processed_dir, s.models_dir, s.features_dir]:
+    for d in [s.raw_dir, s.processed_dir, s.models_dir, s.features_dir, s.results_dir]:
         Path(d).mkdir(parents=True, exist_ok=True)
 
 
@@ -91,6 +92,7 @@ def load_settings(*, prefer_latest_run: bool = True) -> Settings:
     processed_dir = resolve_path(os.getenv("PROCESSED_DIR"), "./data/processed")
     features_dir = resolve_path(os.getenv("FEATURES_DIR"), "./data/processed/features")
     models_dir = resolve_path(os.getenv("MODELS_DIR"), "./data/models")
+    results_dir = resolve_path(os.getenv("RESULTS_DIR"), "./data/models/results")
 
     raw_recipes_path = resolve_path(os.getenv("RAW_RECIPES_PATH"), "./data/raw/gold/modeling_recipe.parquet")
     raw_reviews_path = resolve_path(os.getenv("RAW_REVIEWS_PATH"), "./data/raw/gold/modeling_reviews.parquet")
@@ -110,6 +112,7 @@ def load_settings(*, prefer_latest_run: bool = True) -> Settings:
         processed_dir=processed_dir,
         features_dir=features_dir,
         models_dir=models_dir,
+        results_dir=results_dir,
         raw_recipes_path=raw_recipes_path,
         raw_reviews_path=raw_reviews_path,
         raw_labeled_reviews_path=raw_labeled_reviews_path,
