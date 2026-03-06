@@ -35,7 +35,7 @@ class FullyConnectedBlock(nn.Module):
 class ResidualBlock(nn.Module):
     def __init__(self, size: int, dropout: float = 0.2):
         """
-        Residual block that applies two fully connected layers with a skip connection. 
+        Baseline Residual block that applies two fully connected layers with a skip connection. 
         The input is added to the output of the two layers before applying a final ReLU activation.
         """
         super().__init__()
@@ -65,4 +65,56 @@ class ResidualBlock(nn.Module):
         out = self.path(x)
         out += identity  # Add skip connection
         out = self.final_relu(out)  # Final activation after addition
+        return out
+
+class ResidualLinearBlock(nn.Module):
+    def __init__(self, in_features, out_features, expansion: int = 2, dropout: float = 0.1):
+        """
+        Upgraded Residual Block that allows for dimension expansion and handles mismatched input/output dimensions with a "shortcut" linear layer.
+        This differs from the standard ResidualBlock by allowing the number of features to change between the input and output, 
+        making it more flexible for deeper architectures where feature dimensions may need to increase.
+        """
+        
+        super().__init__()
+        # Internal dimension expansion
+        mid_features = out_features * expansion
+        
+        self.fc1 = nn.Linear(in_features, mid_features)
+        self.bn1 = nn.BatchNorm1d(mid_features)
+        self.relu = nn.ReLU(inplace=True)
+        
+        self.fc2 = nn.Linear(mid_features, out_features)
+        self.bn2 = nn.BatchNorm1d(out_features)
+        self.dropout = nn.Dropout(dropout)
+        
+        # W&B "Shortcut" Logic: Handles dimension mismatch
+        self.shortcut = nn.Sequential()
+        if in_features != out_features:
+            self.shortcut = nn.Sequential(
+                nn.Linear(in_features, out_features),
+                nn.BatchNorm1d(out_features)
+            )
+        
+        self.init_weights()
+            
+    def init_weights(self):
+        for m in [self.fc1, self.fc2]:
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+        identity = self.shortcut(x)
+        
+        out = self.fc1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        
+        out = self.fc2(out)
+        out = self.bn2(out)
+        out = self.dropout(out)
+        
+        # Identity addition before the final ReLU non-linearity
+        out += identity
+        out = self.relu(out)
         return out

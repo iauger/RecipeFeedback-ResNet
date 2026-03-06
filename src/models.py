@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
 from enum import Enum
-from src.layers import FullyConnectedBlock, ResidualBlock
+from src.layers import FullyConnectedBlock, ResidualBlock, ResidualLinearBlock
 
 class HeadType(Enum):
     SHALLOW = "shallow"
     DEEP = "deep"
     RESIDUAL = "residual"
+    RESIDUAL_V2 = "residual_v2"
 
 class AblationType(Enum):
     META_ONLY = "meta_only"
@@ -46,11 +47,13 @@ class RecipeNet(nn.Module):
         
         # Head selection
         if head_type == HeadType.SHALLOW:
-            self.backbone = self.build_shallow_head(fusion_dim, hidden_dim)
+            self.head = self.build_shallow_head(fusion_dim, hidden_dim)
         elif head_type == HeadType.DEEP:
-            self.backbone = self.build_deep_head(fusion_dim, hidden_dim)
+            self.head = self.build_deep_head(fusion_dim, hidden_dim)
         elif head_type == HeadType.RESIDUAL:
-            self.backbone = self.build_residual_head(fusion_dim, hidden_dim)
+            self.head = self.build_residual_head(fusion_dim, hidden_dim)
+        elif head_type == HeadType.RESIDUAL_V2:
+            self.head = self.build_residual_head_v2(fusion_dim, hidden_dim)
         else:
             raise ValueError(f"Unsupported head type: {head_type}")
         
@@ -90,6 +93,14 @@ class RecipeNet(nn.Module):
             FullyConnectedBlock(fusion_dim, hidden_dim)
         )
 
+    def build_residual_head_v2(self, fusion_dim: int, hidden_dim: int) -> nn.Sequential:
+        # Improved residual architecture with more sophisticated skip connections and dimension expansion to allow for more complex feature interactions
+        return nn.Sequential(
+            FullyConnectedBlock(fusion_dim, fusion_dim),
+            *[ResidualLinearBlock(fusion_dim, fusion_dim, expansion=2) for _ in range(6)],
+            FullyConnectedBlock(fusion_dim, hidden_dim)
+        )
+
     def forward(self, meta_x, tag_x, return_embeddings=False, ablation: AblationType = AblationType.ALL_FEATURES):
         # Apply Ablation at the input level
         if ablation == AblationType.META_ONLY:
@@ -103,7 +114,7 @@ class RecipeNet(nn.Module):
         
         # Fusion
         fused = torch.cat((meta_out, tag_out), dim=1)
-        embeddings = self.backbone(fused)
+        embeddings = self.head(fused)
         
         # Final prediction
         prediction = self.regressor(embeddings)
@@ -112,3 +123,5 @@ class RecipeNet(nn.Module):
         if return_embeddings:
             return prediction, embeddings
         return prediction
+    
+    

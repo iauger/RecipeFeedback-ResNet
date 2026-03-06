@@ -8,7 +8,7 @@ from src.preprocessing import preprocess_data
 from src.config import Settings, load_settings
 from src.dataset import RecipeDataset
 from src.models import AblationType, RecipeNet, HeadType
-from src.trainer import Trainer
+from src.trainer import Trainer, LossFunc
 
 # Configuration
 class Config:
@@ -17,6 +17,7 @@ class Config:
     batch_size = 64  
     epochs = 1
     hidden_dim = 128
+    loss_fn = LossFunc.HUBER # LossFunc.MSE, LossFunc.MAE, or LossFunc.HUBER
     head_type = HeadType.SHALLOW # HeadType.SHALLOW, HeadType.DEEP, or HeadType.RESIDUAL
     ablation = AblationType.ALL_FEATURES # AblationType.META_ONLY, AblationType.TAG_ONLY, or AblationType.ALL_FEATURES
     return_embeddings = False # Set to True to return and save latent embeddings during evaluation
@@ -53,7 +54,7 @@ def main():
     # Train
     print(f"Training the {cfg.head_type.value} model on {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}:")
     trainer = Trainer(model, train_loader, val_loader, cfg)
-    history = trainer.fit(cfg.epochs, cfg.head_type, cfg.ablation)
+    history = trainer.fit(cfg.epochs, cfg.head_type, cfg.ablation, cfg.loss_fn)
     
     # Evaluate on Test Set
     print(f"Test set evaluation for {cfg.head_type.value} model:")

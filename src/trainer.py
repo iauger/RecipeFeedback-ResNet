@@ -6,11 +6,24 @@ import time
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from enum import Enum
 from tqdm import tqdm
 from src.config import Settings, load_settings
 from src.models import AblationType, HeadType
 
 
+class LossFunc(Enum):
+    MSE = "mse"
+    HUBER = "huber"
+    LOG_CASH = "log_cash"
+
+class LogCoshLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, y_pred, y_true):
+        x = y_pred - y_true
+        return torch.mean(torch.log(torch.cosh(x + 1e-12)))
 
 class Trainer:
     def __init__(self, model, train_loader, val_loader, config):
@@ -28,16 +41,49 @@ class Trainer:
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
-        self.criterion = nn.HuberLoss() 
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.config.learning_rate, weight_decay=self.config.weight_decay)
+        
+        # Define the loss function based on the configuration
+        loss_setting = getattr(config, 'loss_fn', LossFunc.HUBER)
+        
+        # Ensure we are comparing strings or Enum values consistently
+        val = loss_setting.value if isinstance(loss_setting, LossFunc) else loss_setting
+        
+        if val == LossFunc.MSE.value:
+            self.criterion = nn.MSELoss()
+        elif val == LossFunc.LOG_CASH.value:
+            self.criterion = LogCoshLoss()
+        else:
+            self.criterion = nn.HuberLoss()
+        
+        def setup_optimizer(self):
+            base_lr = self.config.learning_rate
+            
+            # Group 1: The "Body" (Embeddings and Pre-processing)
+            base_params = [p for n, p in self.model.named_parameters() 
+                        if "head" not in n]
+            
+            # Group 2: The "Head" (Your new ResNet-V2 layers)
+            head_params = [p for n, p in self.model.named_parameters() 
+                        if "head" in n]
+
+            # Differential Learning Rates
+            optimizer = torch.optim.AdamW([
+                {'params': base_params, 'lr': base_lr},
+                {'params': head_params, 'lr': base_lr * self.config.lr_mult}
+            ], weight_decay=self.config.weight_decay)
+            
+            return optimizer
+        
+        self.optimizer = setup_optimizer(self)
         self.history = {
             'model_type': None,
             'ablation_type': None,
+            'loss_type': None,
             'train_loss': [], 
             'val_loss': [],
             'grad_norm': []
             }
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min')
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=5, factor=0.5)
     
     def compute_grad_norm(self) -> float:
         total_norm = 0.0
@@ -99,18 +145,26 @@ class Trainer:
         self.history['val_loss'].append(avg_loss)
         return avg_loss
 
-    def fit(self, epochs: int, head_type: HeadType, ablation: AblationType) -> dict[str, list[float]]:
+    def fit(self, epochs: int, head_type: HeadType, ablation: AblationType, loss_fn: LossFunc) -> dict[str, list[float]]:
         s = load_settings()
         
+        if loss_fn == LossFunc.MSE:
+            self.criterion = nn.MSELoss()
+        elif loss_fn == LossFunc.LOG_CASH:
+            self.criterion = LogCoshLoss()
+        else:
+            self.criterion = nn.HuberLoss()
+            
         self.current_ablation = ablation
+        self.history['loss_type'] = loss_fn.value
         self.history['ablation_type'] = ablation.value 
         self.history['model_type'] = head_type.value
         
-        model_name = os.path.join(s.models_dir, f"best_model_{head_type.value}.pth")
+        model_name = os.path.join(s.models_dir, f"best_model_{head_type.value}_{ablation.value}.pth")
         best_val_loss = float('inf')
         
         # Early stopping config
-        patience = 15
+        patience = 20
         trigger_times = 0
         
         epoch_pbar  = tqdm(range(1, epochs + 1), desc="Training Progress", unit="epoch")
