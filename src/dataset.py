@@ -30,6 +30,8 @@ class RecipeDataset(Dataset):
         # Convert features to tensors
         self.meta_features = torch.tensor(df[self.meta_cols].values, dtype=torch.float32)
         self.tag_features = torch.tensor(df[self.tag_cols].values, dtype=torch.float32)
+        self.recipe_ids = df['recipe_id'].values
+        self.recipe_name = df['name'].values
         
     @property
     def meta_dim(self) -> int:
@@ -45,9 +47,11 @@ class RecipeDataset(Dataset):
     def __len__(self) -> int:
         return len(self.targets)
 
-    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Return a tuple of (metadata features, tag features, target)
+    def __getitem__(self, idx):
+        # Return a tuple of (metadata features, tag features, target, recipe_ids, recipe_name)
         meta_features = self.meta_features[idx]
         tag_features = self.tag_features[idx]
         target = self.targets[idx]
-        return meta_features, tag_features, target
+        recipe_id = self.recipe_ids[idx]
+        recipe_name = self.recipe_name[idx]
+        return meta_features, tag_features, target, recipe_id, recipe_name

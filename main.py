@@ -72,7 +72,7 @@ def main():
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 experiment_id = f"{head.value}_{ablation.value}_{loss_function.value}_{timestamp}"
                 
-                test_metrics, embeds = trainer.evaluate(
+                test_metrics, bundle = trainer.evaluate(
                     test_loader, head, ablation, return_embeddings=cfg.return_embeddings
                 )
                 
@@ -82,8 +82,9 @@ def main():
                 with open(results_path, 'w') as f:
                     json.dump(history, f, indent=4)
                 
-                if embeds is not None:
-                    torch.save(embeds, os.path.join(s.results_dir, f"embeds_{experiment_id}.pt"))
+                if bundle is not None:
+                    # This now contains both 'embeddings' and 'targets'
+                    torch.save(bundle, os.path.join(s.results_dir, f"manifold_bundle_{experiment_id}.pt"))
                 
                 print(f"Finished {experiment_id}")
     

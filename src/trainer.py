@@ -209,20 +209,27 @@ class Trainer:
         total_loss = 0
         total_mae = 0
         all_embeddings = []
+        all_targets = []
+        all_ids = []
+        all_names = []
         
         print(f"Evaluating {head_type.value} model on {len(loader.dataset)} test samples:")
         
         with torch.no_grad():
-            for meta_x, tag_x, targets in loader:
+            for meta_x, tag_x, targets, ids, names in loader:
                 meta_x, tag_x, targets = meta_x.to(self.device), tag_x.to(self.device), targets.to(self.device)
                 
                 if return_embeddings:
                     outputs, embeddings = self.model(meta_x, tag_x, return_embeddings=True, ablation=ablation)
                     all_embeddings.append(embeddings.cpu())
+                    all_targets.append(targets.cpu())
+                    all_ids.extend(ids)
+                    all_names.extend(names)
+                    
                 else:
                     outputs = self.model(meta_x, tag_x, return_embeddings=False, ablation=ablation)
                                 
-                # Use standard MSE for reporting, even if we trained with Huber
+                # Use standard MSE for reporting regardless of loss used during training, to maintain consistent evaluation metrics
                 loss = torch.nn.functional.mse_loss(outputs, targets)
                 mae = torch.nn.functional.l1_loss(outputs, targets)
                 
@@ -239,11 +246,14 @@ class Trainer:
             'test_mae': avg_mae
         }
         
-        print("-" * 30)
-        print(f"Final Test Metrics for {head_type.value}:")
-        print(f"MSE:  {avg_mse:.4f}")
-        print(f"RMSE: {avg_rmse:.4f}")
-        print(f"MAE:  {avg_mae:.4f}")
-        print("-" * 30)
+        # Bundle embeddings and targets for downstream analysis
+        if return_embeddings:
+            bundle = {
+                'embeddings': torch.cat(all_embeddings),
+                'targets': torch.cat(all_targets),
+                'recipe_ids': all_ids,
+                'recipe_names': all_names
+            }
+            return metrics, bundle
         
-        return metrics, (torch.cat(all_embeddings) if return_embeddings else None)
+        return metrics, None
