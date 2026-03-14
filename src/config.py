@@ -55,6 +55,7 @@ class Settings:
     processed_dir: str
     src_dir: str
     models_dir: str
+    best_model_dir: str
     features_dir: str
     results_dir: str
     # Data file paths
@@ -66,7 +67,12 @@ class Settings:
     # Processed data file paths
     processed_recipes_path: str
     processed_reviews_path: str
+    processed_search_path: str
     
+    # Final outputs
+    best_model_path: str
+    best_model_embedding:str
+    best_model_umap_path: str
     
 def validate_settings(s: Settings) -> None:
     require_raw = os.getenv("REQUIRE_RAW_INPUTS", "0").strip() == "1"
@@ -96,13 +102,19 @@ def load_settings(*, prefer_latest_run: bool = True) -> Settings:
 
     raw_recipes_path = resolve_path(os.getenv("RAW_RECIPES_PATH"), "./data/raw/gold/modeling_recipe.parquet")
     raw_reviews_path = resolve_path(os.getenv("RAW_REVIEWS_PATH"), "./data/raw/gold/modeling_reviews.parquet")
-    raw_labeled_reviews_path = resolve_path(os.getenv("RAW_LABELED_REVIEWS_PATH"), "./data/raw/gold/gold_features_1.4M.parquet")
+    raw_labeled_reviews_path = resolve_path(os.getenv("RAW_LABELED_REVIEWS_PATH"), "./data/raw/gold/gold_labeled_reviews_20260310_135905.parquet")
     processed_reviews_path = resolve_path(os.getenv("PROCESSED_REVIEWS_PATH"), "./data/processed/PROCESSED_reviews.parquet")
     processed_recipes_path = resolve_path(os.getenv("PROCESSED_RECIPES_PATH"), "./data/processed/PROCESSED_recipes.parquet")
+    processed_search_path = resolve_path(os.getenv("PROCESSED_SEARCH_PATH"), "./data/processed/PROCESSED_search_recipes.parquet")
 
     raw_dir = resolve_path(os.getenv("RAW_DIR"), "./data/raw")
     processed_dir = resolve_path(os.getenv("PROCESSED_DIR"), "./data/processed")
     features_dir = resolve_path(os.getenv("FEATURES_DIR"), "./data/processed/features")
+    
+    best_model_dir = resolve_path(os.getenv("BEST_MODEL_DIR"), "./data/models/best")
+    best_model_path = resolve_path(os.getenv("BEST_MODEL_PATH"), f"{best_model_dir}/best_model.pt")
+    best_model_embedding = resolve_path(os.getenv("BEST_MODEL_EMBEDDING"), f"{best_model_dir}/final_corpus_embeddings.pt")
+    best_model_umap_path = resolve_path(os.getenv("BEST_MODEL_UMAP_PATH"), f"{best_model_dir}/final_model_umap_projection.npy")
     
     s = Settings(
         env=env,
@@ -113,11 +125,16 @@ def load_settings(*, prefer_latest_run: bool = True) -> Settings:
         features_dir=features_dir,
         models_dir=models_dir,
         results_dir=results_dir,
+        best_model_dir=best_model_dir,
+        best_model_path=best_model_path,
+        best_model_embedding=best_model_embedding,
+        best_model_umap_path=best_model_umap_path,
         raw_recipes_path=raw_recipes_path,
         raw_reviews_path=raw_reviews_path,
         raw_labeled_reviews_path=raw_labeled_reviews_path,
         processed_reviews_path=processed_reviews_path,
-        processed_recipes_path=processed_recipes_path
+        processed_recipes_path=processed_recipes_path,
+        processed_search_path=processed_search_path
     )
     validate_settings(s)
     return s

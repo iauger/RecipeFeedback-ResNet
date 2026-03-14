@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from typing import cast
 
 """
 Layers module for defining reusable building blocks of the neural network architecture, such as fully connected blocks and residual blocks.
@@ -118,3 +119,39 @@ class ResidualLinearBlock(nn.Module):
         out += identity
         out = self.relu(out)
         return out
+
+class PLQPLayer(nn.Module):
+    def __init__(self, num_features: int, num_bins: int = 15, embeddings_dim: int = 16) -> None:
+        super().__init__()
+        self.num_features = num_features
+        self.num_bins = num_bins
+        self.embeddings_dim = embeddings_dim
+        
+        # Bin centers on the pre-standardized data
+        bin_centers = torch.linspace(-3, 3, num_bins)
+        self.register_buffer('bin_centers', bin_centers)
+        
+        # Distance between adjacent bins
+        self.delta = bin_centers[1] - bin_centers[0]
+        
+        # Learnable embeddings for each bin and feature
+        self.embeddings = nn.Parameter(torch.empty(num_features, num_bins, embeddings_dim))
+        
+        # Standard normal initialization for embeddings
+        nn.init.normal_(self.embeddings, mean=0.0, std=0.01)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x shape: (batch_size, num_features)
+        batch_size = x.size(0)
+        
+        # Expand dimensions for broadcasting
+        x_expanded = x.unsqueeze(-1)
+        bin_centers = cast(torch.Tensor, self.bin_centers)
+        
+        distances = torch.abs(x_expanded - bin_centers)
+        weights = torch.relu(1.0 - (distances / self.delta))  
+        
+        out = torch.einsum('bfn,fnm->bfm', weights, self.embeddings)
+        
+        return out.reshape(batch_size, -1)
+        

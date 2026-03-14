@@ -13,15 +13,21 @@ import pandas as pd
 class RecipeDataset(Dataset):
     def __init__(self, df: pd.DataFrame):
         """
-        Group features into metadata and tags
+        Group features into continuous metadata, categorical metadata, and tags
         """
-        # Metadata tensors
-        self.meta_cols = [
+        # Continuous Numerical Features
+        self.num_cols = [
             'minutes', 'n_steps', 'n_ingredients', 'calories', 'fat', 
             'sugar', 'sodium', 'protein', 'saturated_fat', 'carbs'
-        ] + [c for c in df.columns if c.startswith(('cat_', 'ing_'))]
+        ]
         
-        # Tag tensors
+        # One-Hot Categorical Features
+        self.cat_cols = [c for c in df.columns if c.startswith(('cat_', 'ing_'))]
+        
+        # Combined Metadata
+        self.meta_cols = self.num_cols + self.cat_cols
+        
+        # Tag features
         self.tag_cols = [c for c in df.columns if c.startswith(('pred_', 'intensity_'))]
         
         # Label
@@ -30,20 +36,31 @@ class RecipeDataset(Dataset):
         # Convert features to tensors
         self.meta_features = torch.tensor(df[self.meta_cols].values, dtype=torch.float32)
         self.tag_features = torch.tensor(df[self.tag_cols].values, dtype=torch.float32)
+        
+        # Identifiers
         self.recipe_ids = df['recipe_id'].values
         self.recipe_name = df['name'].values
-        
+    
     @property
     def meta_dim(self) -> int:
         """Returns the number of metadata/structural features."""
         return len(self.meta_cols)
-
+    
+    @property
+    def num_dim(self) -> int:
+        """Returns the number of continuous numerical features."""
+        return len(self.num_cols)
+    
+    @property
+    def cat_dim(self) -> int:
+        """Returns the number of categorical features."""
+        return len(self.cat_cols)
+    
     @property
     def tag_dim(self) -> int:
-        """Returns the number of NLP/experiential features."""
+        """Returns the number of tag features."""
         return len(self.tag_cols)
         
-
     def __len__(self) -> int:
         return len(self.targets)
 

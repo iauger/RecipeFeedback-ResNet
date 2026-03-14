@@ -12,12 +12,14 @@ Preprocessing module for ingestion, transformation and scaling of the recipe and
     - preprocess_report: Generate a report on the preprocessing steps, including data quality and feature distributions.
 """
 
+import os
+import json
 import numpy as np
 import pandas as pd 
 from typing import Tuple, cast
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, MultiLabelBinarizer
 
-from src.config import Settings
+from src.config import Settings, load_settings
 
 def load_data(s: Settings) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -213,33 +215,89 @@ def encode_multi_label_features(
     
     return pd.concat([df, encoded_df], axis=1)
 
-def preprocess_data(settings: Settings) -> pd.DataFrame:
-    # Load data
-    recipe_df, review_df, label_df = load_data(settings)
+def format_for_search(df: pd.DataFrame) -> pd.DataFrame:
+    """Applies Elasticsearch-specific array parsing and boolean casting to the raw dataframe."""
+    search_df = df.copy()
     
-    # Aggregate data
-    review_agg_df = review_aggregation(label_df)
+    # Cast predictions to boolean
+    pred_cols = [c for c in search_df.columns if c.startswith("pred_")]
+    search_df[pred_cols] = search_df[pred_cols].astype(bool)
     
-    # Validate merge
-    validate_merge(recipe_df, review_agg_df)
+    # Convert ingredients to arrays & remove underscores
+    search_df['ingredients_clean'] = search_df['ingredients_clean'].fillna("").apply(
+        lambda x: [ing.replace('_', ' ') for ing in str(x).split()]
+    )
     
-    # Merge data
-    merged_df = merge_data(recipe_df, review_agg_df)
+    # Convert tags to simple arrays
+    search_df['tags_clean'] = search_df['tags_clean'].fillna("").apply(
+        lambda x: str(x).split()
+    )
     
-    # Scale features
-    standard_cols = [
-        col for col in merged_df.columns 
-        if col not in ['recipe_id', 'raw_mean_rating', 'review_count', 'bayesian_rating', 'name'] 
-        and not col.startswith('pred_') 
-        and not col.startswith('intensity_')
-        and merged_df[col].dtype in ['float64', 'int64'] 
-    ]
-    minmax_cols = [col for col in merged_df.columns if col.startswith('intensity_')]
-    scaled_df = scale_features(merged_df, standard_cols, minmax_cols)
+    return search_df
+
+def export_static_mapping(df: pd.DataFrame, settings: Settings) -> None:
+    """
+    Saves a static JSON mapping of column names to indices.
+    """
+    # Filter for the exact features used by RecipeNet
+    model_features = [col for col in df.columns if col not in 
+                     ['recipe_id', 'name', 'bayesian_rating', 'raw_mean_rating', 'review_count']]
     
-    # Encode recipe tags
-    encoded_df = encode_multi_label_features(scaled_df, 'tags_clean', 'cat', top_n=100)
-    encoded_df = encode_multi_label_features(encoded_df, 'ingredients_clean', 'ing', top_n=100)
+    mapping = {col: i for i, col in enumerate(model_features)}
+    
+    mapping_path = os.path.join(settings.models_dir, "column_mapping.json")
+    with open(mapping_path, "w") as f:
+        json.dump(mapping, f, indent=4)
+    print(f"Static mapping reference saved to {mapping_path}")
+
+def write_preprocessed_data(df: pd.DataFrame, settings: Settings) -> None:
+    """
+    Write the preprocessed DataFrame to a Parquet file for downstream use.
+    """
+    df.to_parquet(settings.processed_recipes_path, index=False)
+    print(f"Preprocessed data written to {settings.processed_recipes_path}")
+
+def preprocess_data(settings: Settings, overwrite_processed: bool = False) -> pd.DataFrame:
+    
+    # Write preprocessed data to Parquet
+    if overwrite_processed or not os.path.exists(settings.processed_recipes_path):
+            
+        # Load data
+        recipe_df, review_df, label_df = load_data(settings)
+        review_agg_df = review_aggregation(label_df)
+        validate_merge(recipe_df, review_agg_df)
+        merged_df = merge_data(recipe_df, review_agg_df)
+        
+        # Format for search (Elasticsearch-specific parsing and boolean casting with no normalization or feature engineering) 
+        # Will not be used directly in modeling but ensures the raw data is in a consistent format for any search-based applications
+        search_df = format_for_search(merged_df)
+        search_df.to_parquet(settings.processed_search_path, index=False)
+        print(f"Search index data written to {settings.processed_search_path}")
+        
+        # Scale features
+        standard_cols = [
+            col for col in merged_df.columns 
+            if col not in ['recipe_id', 'raw_mean_rating', 'review_count', 'bayesian_rating', 'name'] 
+            and not col.startswith('pred_') 
+            and not col.startswith('intensity_')
+            and merged_df[col].dtype in ['float64', 'int64'] 
+        ]
+        minmax_cols = [col for col in merged_df.columns if col.startswith('intensity_')]
+        scaled_df = scale_features(merged_df, standard_cols, minmax_cols)
+        
+        # Encode recipe tags
+        encoded_df = encode_multi_label_features(scaled_df, 'tags_clean', 'cat', top_n=100)
+        encoded_df = encode_multi_label_features(encoded_df, 'ingredients_clean', 'ing', top_n=100)
+        
+        # Export static mapping of column names to indices for consistent reference in model input layers
+        export_static_mapping(encoded_df, settings)
+        
+        # Finalize and write preprocessed data
+        write_preprocessed_data(encoded_df, settings)
+    
+    else:
+        print(f"File already exists: {settings.processed_recipes_path}")
+        encoded_df = pd.read_parquet(settings.processed_recipes_path)
 
     return encoded_df
 
@@ -262,3 +320,8 @@ def preprocess_report(encoded_df: pd.DataFrame) -> None:
               f"std={encoded_df[col].std():.4f}, "
               f"min={encoded_df[col].min():.4f}, "
               f"max={encoded_df[col].max():.4f}")
+
+if __name__ == "__main__":
+    s = load_settings()
+    df = preprocess_data(s, overwrite_processed=True)
+    preprocess_report(df)
