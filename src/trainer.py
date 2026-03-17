@@ -13,7 +13,7 @@ from src.models import AblationType, HeadType
 class LossFunc(Enum):
     MSE = "mse"
     HUBER = "huber"
-    LOG_CASH = "log_cosh"
+    LOG_COSH = "log_cosh"
 
 
 class LogCoshLoss(nn.Module):
@@ -64,7 +64,7 @@ class Trainer:
 
         if val == LossFunc.MSE.value:
             return nn.MSELoss()
-        elif val == LossFunc.LOG_CASH.value:
+        elif val == LossFunc.LOG_COSH.value:
             return LogCoshLoss()
         else:
             return nn.HuberLoss()
@@ -161,8 +161,9 @@ class Trainer:
         self.history["ablation_type"] = ablation.value
         self.history["model_type"] = head_type.value
 
+        # Save best checkpoint for this experiment configuration
         model_name = os.path.join(
-            s.models_dir,
+            s.results_dir,
             f"best_model_{head_type.value}_{ablation.value}_{loss_fn.value}.pth"
         )
         self.best_model_path = model_name

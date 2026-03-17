@@ -1,19 +1,15 @@
 # src/config.py
 
 """
-Config module for loading and validating environment variables
+Configuration utilities for resolving project paths and loading runtime settings.
 """
 
 from __future__ import annotations
 
-import datetime
-from datetime import datetime
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
-import platform
-import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,7 +32,6 @@ def resolve_path(path: str | None, default: str) -> str:
         path = default
 
     path = path.strip()
-
     p = Path(path)
 
     if p.is_absolute():
@@ -58,6 +53,7 @@ class Settings:
     best_model_dir: str
     features_dir: str
     results_dir: str
+    
     # Data file paths
     # Raw data file paths
     raw_recipes_path: str
@@ -71,7 +67,7 @@ class Settings:
     
     # Final outputs
     best_model_path: str
-    best_model_embedding:str
+    best_model_embeddings_path: str
     best_model_umap_path: str
     
 def validate_settings(s: Settings) -> None:
@@ -83,11 +79,11 @@ def validate_settings(s: Settings) -> None:
                 raise FileNotFoundError(f"Missing required file: {p}")
 
     # still ensure directories exist
-    for d in [s.raw_dir, s.processed_dir, s.models_dir, s.features_dir, s.results_dir]:
+    for d in [s.raw_dir, s.processed_dir, s.models_dir, s.features_dir, s.results_dir, s.best_model_dir]:
         Path(d).mkdir(parents=True, exist_ok=True)
 
 
-def load_settings(*, prefer_latest_run: bool = True) -> Settings:
+def load_settings() -> Settings:
     load_dotenv(override=False)
 
     env = os.getenv("ENV", "local").strip().lower()
@@ -106,15 +102,11 @@ def load_settings(*, prefer_latest_run: bool = True) -> Settings:
     processed_reviews_path = resolve_path(os.getenv("PROCESSED_REVIEWS_PATH"), "./data/processed/PROCESSED_reviews.parquet")
     processed_recipes_path = resolve_path(os.getenv("PROCESSED_RECIPES_PATH"), "./data/processed/PROCESSED_recipes.parquet")
     processed_search_path = resolve_path(os.getenv("PROCESSED_SEARCH_PATH"), "./data/processed/PROCESSED_search_recipes.parquet")
-
-    raw_dir = resolve_path(os.getenv("RAW_DIR"), "./data/raw")
-    processed_dir = resolve_path(os.getenv("PROCESSED_DIR"), "./data/processed")
-    features_dir = resolve_path(os.getenv("FEATURES_DIR"), "./data/processed/features")
     
     best_model_dir = resolve_path(os.getenv("BEST_MODEL_DIR"), "./data/models/best")
-    best_model_path = resolve_path(os.getenv("BEST_MODEL_PATH"), f"{best_model_dir}/best_model.pt")
-    best_model_embedding = resolve_path(os.getenv("BEST_MODEL_EMBEDDING"), f"{best_model_dir}/final_corpus_embeddings.pt")
-    best_model_umap_path = resolve_path(os.getenv("BEST_MODEL_UMAP_PATH"), f"{best_model_dir}/final_model_umap_projection.npy")
+    best_model_path = resolve_path(os.getenv("BEST_MODEL_PATH"), f"{best_model_dir}/runs/best_model_residual_v2_all_features_mse.pth")
+    best_model_embeddings_path = resolve_path(os.getenv("BEST_MODEL_EMBEDDINGS_PATH"), f"{best_model_dir}/final_residual_v2_embeddings.pt")
+    best_model_umap_path = resolve_path(os.getenv("BEST_MODEL_UMAP_PATH"), f"{best_model_dir}/final_residual_v2_umap_projection.npy")
     
     s = Settings(
         env=env,
@@ -127,7 +119,7 @@ def load_settings(*, prefer_latest_run: bool = True) -> Settings:
         results_dir=results_dir,
         best_model_dir=best_model_dir,
         best_model_path=best_model_path,
-        best_model_embedding=best_model_embedding,
+        best_model_embeddings_path=best_model_embeddings_path,
         best_model_umap_path=best_model_umap_path,
         raw_recipes_path=raw_recipes_path,
         raw_reviews_path=raw_reviews_path,

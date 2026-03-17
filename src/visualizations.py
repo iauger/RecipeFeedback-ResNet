@@ -13,9 +13,12 @@ import umap
 import torch
 import datetime
 from scipy.stats import spearmanr
-
-
 from src.config import Settings, load_settings
+
+"""
+Set of visualization and helper functions for analyzing the data, experimental results, model mappings, etc. 
+I built out this file mostly to keep the not
+"""
 
 def rating_distribution_plots(
     df: pd.DataFrame,
@@ -25,12 +28,6 @@ def rating_distribution_plots(
     """
     Plot raw vs. Bayesian-smoothed rating distributions using both
     log-scaled and linear-scaled y-axes.
-
-    Layout:
-        [0,0] Raw ratings (log y)
-        [0,1] Smoothed ratings (log y)
-        [1,0] Raw ratings (linear y)
-        [1,1] Smoothed ratings (linear y)
     """
     fig, axes = plt.subplots(2, 2, figsize=(16, 8))
     axes = np.array(axes) 
@@ -125,8 +122,7 @@ def rating_distribution_plots(
     plt.show()
 
 def get_latest_results(results_dir: str):
-    # Fixed Regex: Using non-greedy match '.+?' to correctly separate 
-    # underscore-heavy names like 'all_features' from 'log_cash'
+    # Helper function to extract the latest result file for each (head, ablation, loss) combination
     pattern = re.compile(
         r"results_(?P<head>[^_]+)_(?P<ablation>.+?)_(?P<loss>huber|mse|mae|log_cash)_(?P<time>\d{8}_\d{6})\.json"
     )
@@ -143,110 +139,6 @@ def get_latest_results(results_dir: str):
                 latest_runs[key] = {'path': f, 'time': timestamp}
                 
     return [val['path'] for val in latest_runs.values()]
-    
-def plot_faceted_comparisons(results_dir):
-    latest_files = get_latest_results(results_dir)
-    losses = ['huber', 'mse', 'log_cash'] 
-    ablations = ['all_features', 'meta_only', 'tag_only']
-    metrics = ['train_loss', 'val_loss', 'grad_norm']
-    
-    for l_type in losses:
-        try:
-            relevant_files = [f for f in latest_files if f"_{l_type}_" in f]
-            if not relevant_files:
-                continue
-
-            fig, axes = plt.subplots(3, 3, figsize=(18, 14))
-            axes = np.array(axes).reshape(3, 3) 
-            fig.suptitle(f"Experimental Matrix: {l_type.upper()} Loss Optimization", fontsize=16)
-            
-            for row, ablation in enumerate(ablations):
-                for col, metric in enumerate(metrics):
-                    ax = axes[row, col]
-                    
-                    # Filter for the specific (Loss, Ablation) combination
-                    plot_files = [f for f in relevant_files if f"_{ablation}_" in f]
-                    
-                    for f in plot_files:
-                        with open(f, 'r') as j:
-                            data = json.load(j)
-                            # model_type is stored in the JSON history
-                            ax.plot(data[metric], label=data['model_type'])
-                    
-                    # 1. Set titles for the top row only
-                    if row == 0:
-                        ax.set_title(metric.replace('_', ' ').title(), fontweight='bold')
-                    
-                    # 2. Set categorical labels for the first column only
-                    if col == 0:
-                        ax.set_ylabel(f"{ablation.upper()}\n{metric.replace('_', ' ').title()}", 
-                                      fontweight='bold')
-                    
-                    # 3. Add legend to every plot to identify Architecture (Shallow, Deep, Residual, V2)
-                    ax.legend(fontsize='small', loc='upper right')
-                    
-                    # 4. Standard formatting
-                    ax.set_xlabel("Epochs" if metric != 'grad_norm' else "Batches")
-                    ax.grid(True, alpha=0.3)
-                    
-            plt.tight_layout(rect=(0, 0.03, 1, 0.95))
-            plt.show()
-        except Exception as e:
-            print(f"Error plotting {l_type}: {e}")
-            plt.close()
-    
-    return None
-
-def generate_leaderboard(results_dir: str):
-    
-    # 1. Check if directory even exists
-    if not os.path.exists(results_dir):
-        print(f"ERROR: Directory not found: {results_dir}")
-        return
-    
-    # 2. Get the files
-    latest_files = get_latest_results(results_dir)
-    
-    if len(latest_files) == 0:
-        # If this prints, your regex in get_latest_results is the problem
-        all_jsons = glob.glob(os.path.join(results_dir, "results_*.json"))
-        print(f"DEBUG: Total results_*.json files in folder: {len(all_jsons)}")
-        if all_jsons:
-            print(f"DEBUG: Example filename: {os.path.basename(all_jsons[0])}")
-        return
-
-    records = []
-    for f in latest_files:
-        try:
-            with open(f, 'r') as j:
-                data = json.load(j)
-                time_match = re.search(r"(\d{8}_\d{6})\.json", f)
-                if time_match:
-                    raw_time = time_match.group(1)
-                    # Parse it and format it as 'Mar 10, 13:11'
-                    dt_obj = datetime.datetime.strptime(raw_time, "%Y%m%d_%H%M%S")
-                    run_date_str = dt_obj.strftime("%b %d, %H:%M")
-                else:
-                    run_date_str = "N/A"
-                records.append({
-                    'Run Date': run_date_str,
-                    'Architecture': data.get('model_type', 'N/A'),
-                    'Ablation': data.get('ablation_type', 'N/A'),
-                    'Loss': data.get('loss_type', 'N/A'),
-                    'RMSE': round(data.get('test_rmse', 0.0), 4),
-                    'MSE': round(data.get('test_mse', 0.0), 4),
-                    'MAE': round(data.get('test_mae', 0.0), 4),
-                    'Epochs': len(data.get('train_loss', []))
-                })
-        except Exception as e:
-            print(f"ERROR: Could not read file {f}: {e}")
-    
-    if records:
-        df = pd.DataFrame(records)
-        df = df.sort_values(by=['RMSE'], ascending=True).reset_index(drop=True)
-        
-        print("\n=== Latest Model Performance Leaderboard ===")
-        print(df.to_markdown(index=False))
 
 def generate_alltime_leaderboard(
     results_dir: str,
@@ -254,30 +146,9 @@ def generate_alltime_leaderboard(
     sort_by: str = "test_rmse",
     ascending: bool = True,
     print_markdown: bool = True
-) -> pd.DataFrame:
+):
     """
     Build a leaderboard from results_*.json experiment files.
-
-    Parameters
-    ----------
-    results_dir : str
-        Directory containing results_*.json files.
-    mode : str
-        One of:
-        - "all_runs": return every parsed run
-        - "best_per_model_ablation_loss": best run per (model_type, ablation_type, loss_type)
-        - "best_per_model_ablation": best run per (model_type, ablation_type), allowing loss to vary
-    sort_by : str
-        Metric used for final sorting of the returned leaderboard.
-    ascending : bool
-        Whether lower values are better for the chosen sort metric.
-    print_markdown : bool
-        If True, prints the leaderboard as markdown.
-
-    Returns
-    -------
-    pd.DataFrame
-        Leaderboard dataframe.
     """
 
     if not os.path.exists(results_dir):
@@ -438,13 +309,11 @@ def generate_hp_leaderboard(results_dir: str):
             core_name = basename[8:-5] 
             
             # Grab just the architecture chunk before the first underscore
-            # e.g., "deep-lr0.0005-bs128-wd1e-05"
             grid_arch_part = core_name.split('_')[0]
             
             # Use Regex to explicitly capture the variables, ignoring internal hyphens
             match = re.match(r"(?P<arch>[^-]+)-lr(?P<lr>.+)-bs(?P<bs>.+)-wd(?P<wd>.+)", grid_arch_part)
             
-            # If it doesn't match the HP grid pattern, skip it!
             if not match:
                 continue
                 
@@ -484,7 +353,7 @@ def generate_hp_leaderboard(results_dir: str):
         except Exception as e:
             print(f"ERROR: Could not read file {f}: {e}")
 
-    # 3. Create DataFrame and sort
+    # Create DataFrame and sort
     if records:
         df = pd.DataFrame(records)
         df = df.sort_values(by=['RMSE'], ascending=True).reset_index(drop=True)
@@ -493,7 +362,7 @@ def generate_hp_leaderboard(results_dir: str):
         print(df.to_markdown(index=False))
     else:
         print("No valid grid search records found. (All files were skipped)")
-
+        
 def compute_recipe_umap(
     bundle_path: str,
     save_path: str | None = None,
@@ -504,26 +373,6 @@ def compute_recipe_umap(
 ) -> np.ndarray:
     """
     Compute a 2D UMAP projection from a saved embedding bundle.
-
-    Parameters
-    ----------
-    bundle_path : str
-        Path to the saved embedding bundle (.pt).
-    save_path : str | None
-        Optional path to save the resulting 2D projection as .npy.
-    n_neighbors : int
-        UMAP neighborhood size.
-    min_dist : float
-        UMAP min_dist parameter.
-    metric : str
-        Distance metric for UMAP.
-    random_state : int
-        Random seed for reproducibility.
-
-    Returns
-    -------
-    np.ndarray
-        Array of shape (n_samples, 2).
     """
     bundle = torch.load(bundle_path, map_location="cpu")
 
@@ -565,30 +414,6 @@ def plot_recipe_manifold(
     """
     Plot the full recipe manifold. If a saved projection exists, load it.
     Otherwise compute UMAP and optionally save it.
-
-    Parameters
-    ----------
-    bundle_path : str
-        Path to saved embedding bundle (.pt).
-    projection_path : str | None
-        Optional path to a saved .npy UMAP projection.
-    save_projection : bool
-        If True, save the computed projection to projection_path.
-    annotate_extremes : bool
-        Whether to annotate highest and lowest rated recipes.
-    point_size : float
-        Scatter point size.
-    alpha : float
-        Point transparency.
-    figsize : tuple[int, int]
-        Figure size.
-    cmap : str
-        Matplotlib colormap name.
-
-    Returns
-    -------
-    np.ndarray
-        UMAP projection array of shape (n_samples, 2).
     """
     bundle = torch.load(bundle_path, map_location="cpu")
 
@@ -652,14 +477,7 @@ def plot_recipe_manifold(
 
 def load_inference_frame(bundle_path: str) -> pd.DataFrame:
     """
-    Load a saved inference bundle and return a tidy dataframe for evaluation.
-
-    Expected keys in bundle:
-        - targets
-        - predictions
-    Optional keys:
-        - recipe_ids
-        - recipe_names
+    Load a saved inference bundle and return a dataframe for evaluation.
     """
     bundle = torch.load(bundle_path, map_location="cpu")
 
@@ -834,6 +652,7 @@ def plot_umap_grid():
     s = load_settings()
     runs_dir = Path(s.best_model_dir) / "runs"
     fig, axes = plt.subplots(2, 3, figsize=(18, 11))
+    fig.subplots_adjust(right=0.88, wspace=0.12, hspace=0.08)
     axes = np.array(axes).flatten()
 
     global_vmin = float("inf")
@@ -900,11 +719,11 @@ def plot_umap_grid():
         ax.spines["right"].set_visible(False)
 
     if scatter is not None:
-        cbar = fig.colorbar(scatter, ax=axes.tolist(), location="right", fraction=0.03, pad=0.04)
+        cax = fig.add_axes((0.90, 0.18, 0.018, 0.68))  # [left, bottom, width, height]
+        cbar = fig.colorbar(scatter, cax=cax)
         cbar.set_label("Bayesian Rating")
 
     fig.suptitle("Embedding Manifolds by Architecture (All Features)", fontsize=16, y=0.98)
-    plt.tight_layout()
     plt.show()
 
 def calculate_spearmanr(bundle_path):

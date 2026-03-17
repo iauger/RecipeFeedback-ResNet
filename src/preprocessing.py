@@ -1,15 +1,8 @@
 # src/preprocessing.py
 
 """
-Preprocessing module for ingestion, transformation and scaling of the recipe and review data.
-    - load_data: Load the recipe and review data from CSV files.
-    - recipe_aggregation: Aggregate the recipe data to create a single row per recipe with relevant features.
-    - review_aggregation: Aggregate the review data to create a single row per recipe with compressed and aggregated review features.
-    - merge_data: Merge the aggregated recipe and review data into a single DataFrame.
-    - scale_features: Scale numerical features using StandardScaler or MinMaxScaler.
-    - bayesian_rating: Calculate the Bayesian average rating for each recipe to account for varying numbers of reviews and ratings.
-    - preprocess_data: Orchestration function for the entire preprocessing pipeline.
-    - preprocess_report: Generate a report on the preprocessing steps, including data quality and feature distributions.
+Preprocessing utilities for loading, aggregating, scaling, encoding, and exporting
+recipe and review-derived features for modeling and search.
 """
 
 import os
@@ -50,7 +43,7 @@ def bayesian_rating(df, global_avg_rating, rating_col='rating', review_count_col
     R = df[rating_col]
     
     b_rating = (v * R + m_threshold * C) / (v + m_threshold)
-    return b_rating\
+    return b_rating
 
 def review_aggregation(reviews_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -117,6 +110,8 @@ def review_aggregation(reviews_df: pd.DataFrame) -> pd.DataFrame:
     
     # Filter to keep only recipes with at least one positive signal in pred_tags
     pred_cols = [c for c in recipe_level_df.columns if c.startswith('pred_')]
+    
+    # Restrict modeling set to recipes with at least one detected semantic review signal
     has_signals = recipe_level_df[pred_cols].sum(axis=1) > 0
     recipe_level_df = recipe_level_df[has_signals].copy()
     
@@ -191,22 +186,21 @@ def encode_multi_label_features(
     """
     Abstracted one-hot encoding for multi-label text columns.
     """
-    # 1. Convert space-separated strings to lists
+    # Convert space-separated strings to lists
     item_lists = df[column].str.split()
     
-    # 2. Identify the top N most frequent items to manage dimensionality
+    # Identify the top N most frequent items to manage dimensionality
     all_items = [item for sublist in item_lists for item in sublist]
     top_items = pd.Series(all_items).value_counts().head(top_n).index.tolist()
     
-    # 3. Filter lists to only include the top N items
+    # Filter lists to only include the top N items
     filtered_items = item_lists.apply(lambda x: [i for i in x if i in top_items])
     
-    # 4. Use MultiLabelBinarizer for one-hot encoding
+    # Use MultiLabelBinarizer for one-hot encoding
     mlb = MultiLabelBinarizer(classes=top_items, sparse_output=False)
     encoded_data = cast(np.ndarray, mlb.fit_transform(filtered_items))
     
-    # 5. Create DataFrame with specific prefix to distinguish feature types
-    # Replaces dashes/spaces with underscores to prevent naming issues in model layers
+    # Create DataFrame with specific prefix to distinguish feature types
     encoded_df = pd.DataFrame(
         encoded_data.astype(np.int32),
         columns=[f"{prefix}_{item.replace('-', '_').replace(' ', '_')}" for item in top_items],
@@ -263,7 +257,7 @@ def preprocess_data(settings: Settings, overwrite_processed: bool = False) -> pd
     if overwrite_processed or not os.path.exists(settings.processed_recipes_path):
             
         # Load data
-        recipe_df, review_df, label_df = load_data(settings)
+        recipe_df, _, label_df = load_data(settings)
         review_agg_df = review_aggregation(label_df)
         validate_merge(recipe_df, review_agg_df)
         merged_df = merge_data(recipe_df, review_agg_df)

@@ -88,7 +88,8 @@ class ResidualLinearBlock(nn.Module):
         self.bn2 = nn.BatchNorm1d(out_features)
         self.dropout = nn.Dropout(dropout)
         
-        # W&B "Shortcut" Logic: Handles dimension mismatch
+        # W&B Shortcut Logic: Handles dimension mismatch
+        # I'm using a pattern that Weights and Biases demonstrated in a sample implementation on their website
         self.shortcut = nn.Sequential()
         if in_features != out_features:
             self.shortcut = nn.Sequential(
@@ -104,7 +105,7 @@ class ResidualLinearBlock(nn.Module):
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = self.shortcut(x)
         
         out = self.fc1(x)
@@ -122,6 +123,10 @@ class ResidualLinearBlock(nn.Module):
 
 class PLQPLayer(nn.Module):
     def __init__(self, num_features: int, num_bins: int = 15, embeddings_dim: int = 16) -> None:
+        """
+        Piecewise linear quantile projection layer for embedding continuous metadata into a richer learned representation. 
+        This approach is based on the Gorishniy et al. paper "On Embeddings for Numerical Features in Tabular Deep Learning"
+        """
         super().__init__()
         self.num_features = num_features
         self.num_bins = num_bins

@@ -1,7 +1,5 @@
 # src/inference.py
 
-from pathlib import Path
-
 import torch
 import os
 from torch.utils.data import DataLoader
@@ -85,7 +83,7 @@ def run_inference(best_model_path: str, winning_head: HeadType, output_name: str
     print(f"Prediction range: [{min(all_preds):.4f}, {max(all_preds):.4f}]")
 
     # Bundle and Save
-    inference_bundle = {
+    embedding_bundle = {
         "recipe_ids": all_ids,
         "recipe_names": all_names,
         "targets": all_targets,
@@ -93,15 +91,16 @@ def run_inference(best_model_path: str, winning_head: HeadType, output_name: str
         "embeddings": final_embeddings_tensor
     }
     
-    output_path = os.path.join(s.results_dir, output_name)
-    torch.save(inference_bundle, output_path)
+    output_path = os.path.join(s.best_model_dir, output_name)
+    torch.save(embedding_bundle, output_path)
     
     print(f"Saved {len(all_ids)} recipes.")
     print(f"Embeddings Shape: {final_embeddings_tensor.shape}")
     print(f"Output located at: {output_path}")
 
 if __name__ == "__main__":
-    WINNING_MODEL_FILE = "data/models/best/runs/best_model_residual_v2_all_features_mse.pth"
+    s = load_settings()
+    WINNING_MODEL_FILE = s.best_model_path
     WINNING_HEAD = HeadType.RESIDUAL_V2
 
     run_inference(

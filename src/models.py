@@ -58,7 +58,7 @@ class RecipeNet(nn.Module):
         self.cat_meta = cat_meta
 
         # Metadata encoder
-        self.legacy_meta_encoder = nn.Sequential(
+        self.default_meta_encoder = nn.Sequential(
             FullyConnectedBlock(meta_in, hidden_dim),
             FullyConnectedBlock(hidden_dim, hidden_dim),
         )
@@ -95,6 +95,7 @@ class RecipeNet(nn.Module):
             self.head = self.build_residual_head(fusion_dim, hidden_dim)
         elif head_type in [HeadType.RESIDUAL_V2, HeadType.RESIDUAL_V3]:
             self.head = self.build_residual_head_v2(fusion_dim, hidden_dim)
+        # In TWO_TOWER, the residual head is applied only to the tag stream before late fusion
         elif head_type == HeadType.TWO_TOWER:
             self.head = self.build_residual_head_v2(hidden_dim, hidden_dim)
         else:
@@ -149,11 +150,11 @@ class RecipeNet(nn.Module):
 
     def forward(
         self,
-        meta_x,
-        tag_x,
+        meta_x: torch.Tensor,
+        tag_x: torch.Tensor,
         return_embeddings: bool = False,
         ablation: AblationType = AblationType.ALL_FEATURES,
-    ):
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         # Input ablation
         if ablation == AblationType.META_ONLY:
             tag_x = torch.zeros_like(tag_x)
@@ -186,11 +187,11 @@ class RecipeNet(nn.Module):
                 )
 
             meta_out = torch.cat((num_out, cat_out), dim=1)
-
+        
         elif self.head_type == HeadType.TWO_TOWER:
             meta_out = self.two_tower_meta_encoder(meta_x)
         else:
-            meta_out = self.legacy_meta_encoder(meta_x)
+            meta_out = self.default_meta_encoder(meta_x)
 
         # Encode semantic review tags
         tag_out = self.tag_encoder(tag_x)

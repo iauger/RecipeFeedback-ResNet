@@ -8,6 +8,7 @@ from src.config import load_settings
 from src.dataset import RecipeDataset
 from src.models import AblationType, RecipeNet, HeadType
 from src.trainer import Trainer, LossFunc
+from src.inference import run_inference
 
 # Configuration
 class Config:
@@ -47,18 +48,18 @@ def main():
     
     # The Experimental Matrix
     heads = [HeadType.SHALLOW, HeadType.DEEP, HeadType.RESIDUAL, HeadType.RESIDUAL_V2, HeadType.RESIDUAL_V3, HeadType.TWO_TOWER]
-    # heads = [HeadType.TWO_TOWER] 
-    # ablations = [AblationType.ALL_FEATURES, AblationType.META_ONLY, AblationType.TAG_ONLY]
-    ablations = [AblationType.ALL_FEATURES] 
-    # loss_fn = [LossFunc.HUBER, LossFunc.MSE, LossFunc.LOG_CASH]
-    loss_fn = [LossFunc.LOG_CASH, LossFunc.HUBER, LossFunc.MSE] 
+    ablations = [AblationType.ALL_FEATURES, AblationType.META_ONLY, AblationType.TAG_ONLY] 
+    loss_functions = [LossFunc.LOG_COSH, LossFunc.HUBER, LossFunc.MSE] 
 
-    MODEL_GRID_SEARCH = True
-    HYPERPARAMETER_GRID_SEARCH = False 
-    if MODEL_GRID_SEARCH:
+    # Adjust these flags to control which parts of the experiment to run.
+    RUN_MODEL_SWEEP = True # Sweep across all combinations of heads, ablations, and loss functions
+    RUN_HPARAM_SWEEP = False # Run a hyperparameter sweep for a specific head/ablation/loss combination
+    RUN_FINAL_INFERENCE = False # Run final inference using the best model and save embeddings for downstream analysis
+    
+    if RUN_MODEL_SWEEP:
         for head in heads: 
             for ablation in ablations:
-                for loss_function in loss_fn:
+                for loss_function in loss_functions:
 
                     print(f"\n>>> Running: {head.value} | {ablation.value} | {loss_function.value}")
                 
@@ -98,7 +99,7 @@ def main():
                     
                     print(f"Finished {experiment_id}")
     
-    if HYPERPARAMETER_GRID_SEARCH:
+    if RUN_HPARAM_SWEEP:
         head = HeadType.DEEP 
         ablation = AblationType.ALL_FEATURES 
         loss_fn = LossFunc.HUBER
@@ -159,6 +160,12 @@ def main():
                         torch.save(bundle, os.path.join(s.results_dir, f"manifold_bundle_{experiment_id}.pt"))
                     
                     print(f"Finished {experiment_id}")
+    
+    if RUN_FINAL_INFERENCE:
+        best_model_path = s.best_model_path
+        winning_head = HeadType.RESIDUAL_V2
+        output_name = f"final_{winning_head.value.lower()}_embeddings.pt"
+        run_inference(best_model_path, winning_head, output_name=output_name)
         
         
         
