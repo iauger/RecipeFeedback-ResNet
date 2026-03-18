@@ -111,11 +111,11 @@ def main():
         for bs in batch_sizes:
             for lr in learning_rates:
                 for wd in weight_decays:
-                    # 3. Create the embedded string name for the leaderboard
+                    # Create the embedded string name for the leaderboard
                     grid_arch_name = f"{head.value}-lr{lr}-bs{bs}-wd{wd}"
                     print(f"\n--- Starting Grid Run: {grid_arch_name} ---")
                     
-                    # 4. Temporarily override the config attributes for this specific loop
+                    # Temporarily override the config attributes for this specific loop
                     cfg.batch_size = bs
                     cfg.learning_rate = lr
                     cfg.weight_decay = wd

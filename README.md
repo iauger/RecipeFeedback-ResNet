@@ -12,6 +12,7 @@ The project is designed for reproducibility and modular experimentation. The ful
 * **Model Outputs:** Saved under `models/results/`
 * **Visualizations:** Generated via `visualizations.py`
 * **Inference Outputs:** Produced using `inference.py`
+* **Execution:** Configure experiment parameters (model, ablation, loss, hyperparameters, inference) in `main.py` and run training/inference. Evaluation is currently performed in `notebooks/project_report.ipynb`. 
 
 ---
 
@@ -32,7 +33,7 @@ Core components of the project repo
 │       └───gold
 │           ├───gold_labeled_reviews_20260310_135905.parquet # Labeled reviews
 │           ├───modeling_recipe.parquet # Cleaned recipe dataset
-│           └───modeling_reviews.parquet # Cleaned, unlabed reviews dataset
+│           └───modeling_reviews.parquet # Cleaned, unlabeled reviews dataset
 ├───notebooks
 │   └───project_report.ipynb
 ├───Reference Documents
